@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>P4 科學：季節變化與太陽光線角度模擬器 (精確科學版)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Three.js + OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body {
+            touch-action: manipulation;
+            user-select: none;
+            overflow: hidden;
+            background-color: #030712;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        @media orientation: portrait {
+            #portrait-warning { display: flex !important; }
+        }
+        #toast { transition: opacity 0.3s ease, transform 0.3s ease; }
+        input[type=range]::-webkit-slider-thumb {
+            cursor: pointer;
+        }
+        .pin-label {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            pointer-events: none;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 8px;
+            white-space: nowrap;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+            transition: opacity 0.15s ease, transform 0.1s ease;
+            backdrop-filter: blur(8px);
+        }
+    </style>
+</head>
+<body class="w-screen h-screen text-slate-100 flex flex-col justify-between p-2 md:p-3 space-y-2">
+
+    <!-- Portrait Mode Warning -->
+    <div id="portrait-warning" class="hidden fixed inset-0 z-50 bg-slate-950/95 flex-col items-center justify-center p-6 text-center space-y-4">
+        <i data-lucide="rotate-cw" class="w-16 h-16 text-amber-400 animate-spin"></i>
+        <h2 class="text-xl font-bold text-slate-100">請旋轉您的裝置至橫屏（Landscape）模式</h2>
+        <p class="text-sm text-slate-400 max-w-xs">本模擬器專為橫屏教學優化，以提供最佳 3D 光影觀察與兩極數據對比體驗。</p>
+    </div>
+
+    <!-- Global Toast Notification -->
+    <div id="toast" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 translate-y-2 bg-amber-500 text-slate-950 font-black text-xs px-4 py-2 rounded-full shadow-2xl flex items-center space-x-2">
+        <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+        <span id="toast-text">已成功復原所有設定至預設狀態！</span>
+    </div>
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="glass-panel rounded-2xl px-3 py-2 flex items-center justify-between shrink-0 shadow-lg">
+        <div class="flex items-center space-x-2">
+            <div class="bg-gradient-to-tr from-amber-500 to-orange-500 p-1.5 rounded-xl text-slate-950 font-black">
+                <i data-lucide="sun" class="w-5 h-5"></i>
+            </div>
+            <div>
+                <h1 class="text-sm md:text-base font-black bg-gradient-to-r from-amber-300 via-orange-300 to-amber-100 bg-clip-text text-transparent">
+                    P4 科學：季節與四季形成模擬器
+                </h1>
+                <p class="text-[10px] text-slate-400 hidden sm:block">香港 (22.3°N) vs 墨爾本 (-37.8°S) | 精確 3D 赤緯、平行光線與直射/斜射受光面積</p>
+            </div>
+        </div>
+
+        <!-- TABS -->
+        <nav class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-xs font-bold space-x-1">
+            <button id="tab-btn-3d" onclick="switchTab('3d')" class="px-3 py-1.5 rounded-lg transition bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md flex items-center space-x-1">
+                <i data-lucide="globe" class="w-3.5 h-3.5"></i>
+                <span>1. 3D 太空軌道與四季</span>
+            </button>
+            <button id="tab-btn-flashlight" onclick="switchTab('flashlight')" class="px-3 py-1.5 rounded-lg transition text-slate-300 hover:text-white flex items-center space-x-1">
+                <i data-lucide="sun-medium" class="w-3.5 h-3.5"></i>
+                <span>2. 3D 光束與受光斑點</span>
+            </button>
+            <button id="tab-btn-deepdive" onclick="switchTab('deepdive')" class="px-3 py-1.5 rounded-lg transition text-slate-300 hover:text-white flex items-center space-x-1">
+                <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+                <span>3. 氣候數據探索</span>
+            </button>
+            <button id="tab-btn-quiz" onclick="switchTab('quiz')" class="px-3 py-1.5 rounded-lg transition text-slate-300 hover:text-white flex items-center space-x-1">
+                <i data-lucide="help-circle" class="w-3.5 h-3.5"></i>
+                <span>4. 概念小測驗</span>
+            </button>
+        </nav>
+
+        <!-- ACTION BUTTONS -->
+        <div class="flex items-center space-x-2">
+            <button onclick="resetAllSettings()" class="px-2.5 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-bold transition flex items-center space-x-1">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                <span class="hidden md:inline">一鍵復原預設</span>
+            </button>
+            <button onclick="toggleFullScreen()" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs transition">
+                <i data-lucide="maximize" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN VIEW CONTAINER -->
+    <main class="flex-1 w-full h-full overflow-hidden relative">
+
+        <!-- TAB 1: 3D ORBIT & DAYLIGHT AREA -->
+        <div id="view-3d" class="w-full h-full grid grid-cols-12 gap-3">
+            <div class="col-span-8 h-full flex flex-col gap-2">
+                <div class="relative glass-panel rounded-2xl overflow-hidden border border-slate-700/80 flex-1">
+                    <div id="canvas-container-3d" class="w-full h-full"></div>
+
+                    <!-- HTML Floating Labels for HK & Melbourne Pins -->
+                    <div id="pin-hk-label" class="pin-label bg-rose-600/90 text-white border-2 border-rose-300 flex items-center space-x-1 shadow-lg shadow-rose-500/30 z-20">
+                        <span class="w-2.5 h-2.5 rounded-full bg-rose-200 animate-ping"></span>
+                        <span class="font-black text-xs">🇭🇰 香港 Hong Kong (22.3°N)</span>
+                    </div>
+                    <div id="pin-mel-label" class="pin-label bg-sky-600/90 text-white border-2 border-sky-300 flex items-center space-x-1 shadow-lg shadow-sky-500/30 z-20">
+                        <span class="w-2.5 h-2.5 rounded-full bg-sky-200 animate-ping"></span>
+                        <span class="font-black text-xs">🇦🇺 墨爾本 Melbourne (-37.8°S)</span>
+                    </div>
+
+                    <!-- Overlay Controls -->
+                    <div class="absolute top-2.5 left-2.5 flex items-center space-x-2 bg-slate-950/85 backdrop-blur p-1.5 rounded-xl border border-slate-800 text-xs shadow-lg">
+                        <button onclick="toggleOrbitPlay()" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg flex items-center space-x-1 transition">
+                            <i id="icon-orbit-play" data-lucide="play" class="w-3.5 h-3.5"></i>
+                            <span id="text-orbit-play">播放公轉</span>
+                        </button>
+                        <button onclick="toggleEarthRotate()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/40 font-bold rounded-lg flex items-center space-x-1 transition">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                            <span id="text-earth-rotate">地球自轉：ON</span>
+                        </button>
+                        <button onclick="zoomToEarth(true)" class="px-2.5 py-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-bold rounded-lg flex items-center space-x-1 transition">
+                            <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                            <span>🔍 近距離觀察地表光影</span>
+                        </button>
+                        <button onclick="zoomToEarth(false)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg transition">
+                            🌐 軌道全景
+                        </button>
+                    </div>
+
+                    <!-- Daylight Area Scientific Badge -->
+                    <div class="absolute bottom-2.5 left-2.5 bg-slate-950/90 backdrop-blur px-3 py-2 rounded-xl border border-slate-800 text-xs space-y-1 shadow-xl">
+                        <div class="font-bold text-amber-300 flex items-center space-x-1">
+                            <i data-lucide="sun-medium" class="w-4 h-4"></i>
+                            <span>南北半球受光面積數據分析</span>
+                        </div>
+                        <div class="text-[11px] text-slate-300 flex space-x-4">
+                            <span>北半球受光比例: <strong id="nh-light-ratio" class="text-rose-400">35% (低)</strong></span>
+                            <span>南半球受光比例: <strong id="sh-light-ratio" class="text-amber-400">65% (高)</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Slider Bar -->
+                <div class="glass-panel p-2.5 rounded-2xl border border-slate-700/80 flex flex-col gap-1.5 shrink-0">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-bold text-slate-200">地球公轉位置 (一年 365 天):</span>
+                        <span id="date-display" class="font-black text-amber-400">第 355 天 (約 12 月 22 日 - 冬至)</span>
+                    </div>
+                    <input id="slider-orbit" type="range" min="1" max="365" value="355" step="1" oninput="onOrbitSliderChange(this.value)" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                    <div class="flex justify-between text-[11px] pt-1">
+                        <button onclick="setSeason(0)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-emerald-400 font-bold">🌱 春分 (第80天 / 3月)</button>
+                        <button onclick="setSeason(1)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-amber-400 font-bold">☀️ 夏至 (第172天 / 6月)</button>
+                        <button onclick="setSeason(2)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-orange-400 font-bold">🍁 秋分 (第264天 / 9月)</button>
+                        <button onclick="setSeason(3)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-sky-400 font-bold">❄️ 冬至 (第355天 / 12月)</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Dynamic Readout Panel -->
+            <div class="col-span-4 h-full glass-panel p-3.5 rounded-2xl border border-slate-700/80 flex flex-col justify-between space-y-3 overflow-y-auto">
+                <div class="space-y-3">
+                    <h2 class="font-bold text-xs text-amber-300 border-b border-slate-800 pb-2 flex items-center space-x-1">
+                        <i data-lucide="compass" class="w-4 h-4"></i>
+                        <span>南北半球光照與氣候比較 (動態同步)</span>
+                    </h2>
+
+                    <!-- HK Status Card -->
+                    <div class="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800 space-y-1">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-rose-400">香港 🇭🇰 (北半球 22.3°N)</span>
+                            <span id="season-hk-label" class="font-black text-sky-400">冬季 Winter</span>
+                        </div>
+                        <div class="text-[11px] text-slate-300">日照角度：<strong id="hk-ray-type" class="text-sky-300">大斜射 (角度低)</strong></div>
+                        <div class="text-[11px] text-slate-300">白晝狀態：<strong id="hk-day-len" class="text-slate-200">晝短夜長 (約 10.5 小時)</strong></div>
+                    </div>
+
+                    <!-- Melbourne Status Card -->
+                    <div class="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800 space-y-1">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-sky-400">墨爾本 🇦🇺 (南半球 -37.8°S)</span>
+                            <span id="season-mel-label" class="font-black text-amber-400">夏季 Summer</span>
+                        </div>
+                        <div class="text-[11px] text-slate-300">日照角度：<strong id="mel-ray-type" class="text-amber-300">直射 (接近90°)</strong></div>
+                        <div class="text-[11px] text-slate-300">白晝狀態：<strong id="mel-day-len" class="text-slate-200">晝長夜短 (約 14.8 小時)</strong></div>
+                    </div>
+
+                    <div class="bg-amber-950/40 border border-amber-500/30 p-2.5 rounded-xl text-[11px] text-amber-200 leading-relaxed space-y-1">
+                        <div class="font-bold flex items-center space-x-1 text-amber-300">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                            <span>科學原理說明：</span>
+                        </div>
+                        <p id="dynamic-explanation-text">
+                            當香港是冬天時，太陽直射南半球（南回歸線）。此時<strong>南半球受太陽照射的表面積顯著大於北半球</strong>，南極圈出現「極晝」，因此南半球獲取的總太陽熱能遠高於北半球！
+                        </p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/60 p-2 rounded-xl text-[10px] text-slate-400 text-center">
+                    💡 提示：按住滑鼠左鍵旋轉 3D 視角；滾輪縮放；觀察直達地表的光線與晨昏線。
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: FLASHLIGHT / VERTICAL TOP-DOWN SUNLIGHT 3D EXPERIMENT -->
+        <div id="view-flashlight" class="hidden w-full h-full grid grid-cols-12 gap-3">
+            <div class="col-span-8 h-full flex flex-col gap-2">
+                <div class="relative glass-panel rounded-2xl overflow-hidden border border-slate-700/80 flex-1">
+                    <div id="canvas-container-flashlight" class="w-full h-full"></div>
+
+                    <div class="absolute top-2.5 left-2.5 bg-slate-950/90 backdrop-blur p-2.5 rounded-xl border border-slate-800 text-xs space-y-1 shadow-lg pointer-events-none">
+                        <div class="text-slate-400">太陽入射角度: <strong id="flashlight-angle-badge" class="text-amber-400 font-black">90° (垂直直射)</strong></div>
+                        <div class="text-[11px] text-slate-300">光束模式：<span class="text-amber-300 font-bold">頂部向下平行太陽光擊中 3D 地球表面</span></div>
+                    </div>
+                </div>
+
+                <!-- Angle Control Slider -->
+                <div class="glass-panel p-2.5 rounded-2xl border border-slate-700/80 flex flex-col gap-1.5 shrink-0">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="font-bold text-slate-200">調整光線照射角度 (直射 90° ➔ 大斜射 30°):</span>
+                        <span id="flashlight-angle-text" class="font-black text-amber-400">90° (垂直直射 Direct)</span>
+                    </div>
+                    <input id="slider-flashlight" type="range" min="30" max="90" value="90" step="1" oninput="onFlashlightSliderChange(this.value)" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                    
+                    <div class="flex justify-between text-[11px] pt-1">
+                        <button onclick="setFlashlightPreset(90)" class="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg font-bold">☀️ 90° 垂直直射 (夏)</button>
+                        <button onclick="setFlashlightPreset(60)" class="px-2.5 py-1 bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 rounded-lg font-bold">🍁 60° 傾斜射入 (春秋)</button>
+                        <button onclick="setFlashlightPreset(30)" class="px-2.5 py-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded-lg font-bold">❄️ 30° 大斜射 (冬)</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Experiment Readout Panel -->
+            <div class="col-span-4 h-full glass-panel p-3.5 rounded-2xl border border-slate-700/80 flex flex-col justify-between space-y-3">
+                <div class="space-y-3">
+                    <h3 class="font-bold text-xs text-amber-300 border-b border-slate-800 pb-2">3D 地表受光斑點面積與熱能量密度</h3>
+                    <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2 text-xs">
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400">相對受光斑點面積:</span>
+                            <span id="exp-area-factor" class="font-bold text-amber-300">1.0x (精小集中)</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400">熱能量密度:</span>
+                            <span id="exp-energy-density" class="font-black text-rose-400">100% (極高)</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-400">地表感覺熱度:</span>
+                            <span id="exp-temp-est" class="font-bold text-amber-400">炎熱 (High Heat)</span>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-slate-300 leading-relaxed bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                        💡 <strong>實驗結論：</strong> 當陽光以 90° 直射時，地表光斑最小、熱能最集中；當角度轉為 30° 大斜射時，光斑擴大為 <strong>2.0 倍長橢圓</strong>，熱能量密度稀釋為 <strong>50%</strong>，因此天氣寒冷！
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: DEEP DIVE MATRIX -->
+        <div id="view-deepdive" class="hidden w-full h-full grid grid-cols-12 gap-3">
+            <div class="col-span-8 h-full flex flex-col gap-2 min-h-0">
+                <div class="relative bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex-1 min-h-0 w-full shadow-inner">
+                    <canvas id="canvas-deepdive" class="w-full h-full block absolute inset-0"></canvas>
+                </div>
+                <div class="glass-panel p-2.5 rounded-2xl border border-slate-700/80 flex items-center justify-between gap-3 text-xs shrink-0">
+                    <span class="font-bold text-slate-200 shrink-0">調整手電筒/太陽入射角:</span>
+                    <input id="deepdive-angle-slider" type="range" min="30" max="90" value="90" step="1" oninput="onDeepDiveAngleChange(this.value)" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                    <span id="deepdive-angle-text" class="text-amber-400 font-bold shrink-0">90° (垂直直射)</span>
+                </div>
+            </div>
+            <div class="col-span-4 h-full glass-panel p-3.5 rounded-2xl border border-slate-700/80 flex flex-col justify-between space-y-3 overflow-y-auto">
+                <div class="space-y-2.5 text-xs">
+                    <h3 class="font-bold text-amber-300 border-b border-slate-800 pb-1.5">香港 vs 墨爾本數據對比表</h3>
+                    <div class="bg-slate-950/80 p-2.5 rounded-xl border border-slate-800 space-y-2">
+                        <table class="w-full text-[11px] text-left">
+                            <thead class="text-amber-400 border-b border-slate-800">
+                                <tr>
+                                    <th class="pb-1">時期</th>
+                                    <th class="pb-1">香港 (22.3°N)</th>
+                                    <th class="pb-1">墨爾本 (-37.8°S)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-slate-300 divide-y divide-slate-800/60">
+                                <tr><td class="py-1 font-bold">6月夏至</td><td class="text-amber-300 font-bold">夏季 (直射 / 白晝 13.5h)</td><td class="text-sky-300">冬季 (斜射 / 白晝 9.5h)</td></tr>
+                                <tr><td class="py-1 font-bold">12月冬至</td><td class="text-sky-300">冬季 (斜射 / 白晝 10.5h)</td><td class="text-amber-300 font-bold">夏季 (直射 / 白晝 14.8h)</td></tr>
+                                <tr><td class="py-1 font-bold">3月春分</td><td class="text-emerald-300">春季 (漸暖 / 晝夜平分 12h)</td><td class="text-orange-300">秋季 (漸涼 / 晝夜平分 12h)</td></tr>
+                                <tr><td class="py-1 font-bold">9月秋分</td><td class="text-orange-300">秋季 (漸涼 / 晝夜平分 12h)</td><td class="text-emerald-300">春季 (漸暖 / 晝夜平分 12h)</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: CONCEPT QUIZ -->
+        <div id="view-quiz" class="hidden w-full h-full glass-panel p-5 rounded-2xl border border-slate-700/80 flex flex-col justify-between max-w-2xl mx-auto shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h2 class="font-black text-base text-amber-300">小地質學家觀念挑戰</h2>
+                <div class="text-xs"><span id="quiz-score" class="text-2xl font-black text-amber-400">0</span> / 100分</div>
+            </div>
+            <div id="quiz-card" class="space-y-3 my-auto">
+                <div class="text-xs md:text-sm font-semibold text-slate-200 flex items-start space-x-2">
+                    <span id="quiz-num" class="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded font-black">Q1</span>
+                    <span id="quiz-question" class="font-bold leading-snug">香港位於北半球。當香港處於炎熱的夏季時，位於南半球的澳洲墨爾本是什麼季節？</span>
+                </div>
+                <div id="quiz-options" class="grid grid-cols-2 gap-2.5 pt-2"></div>
+            </div>
+            <div id="quiz-feedback" class="hidden p-3 rounded-xl text-xs font-medium leading-relaxed"></div>
+            <div class="flex justify-between items-center pt-2">
+                <button onclick="resetQuiz()" class="text-xs text-slate-400 underline">重新挑戰</button>
+                <button id="btn-next-quiz" onclick="nextQuestion()" class="hidden px-4 py-2 bg-amber-500 text-slate-950 font-black text-xs rounded-xl">下一題 ➔</button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        let currentTab = '3d', isOrbitPlaying = false, isEarthRotating3D = true, orbitDay = 355;
+        let flashlightAngle = 90, deepDiveAngle = 90;
+
+        let scene3D, camera3D, renderer3D, controls3D, earthMesh3D, dirLight3D, orbitRingLine, sunlightBeamsGroup;
+        let hkPinMesh, melPinMesh;
+        let sceneFlash, cameraFlash, rendererFlash, controlsFlash, earthMeshFlash, sunRaysGroup, footprintMesh, flashlightBodyMesh;
+
+        const AXIS_TILT_RAD = (23.5 * Math.PI) / 180;
+        lucide.createIcons();
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const toastText = document.getElementById('toast-text');
+            if (!toast || !toastText) return;
+            toastText.innerText = message;
+            toast.classList.remove('opacity-0', 'translate-y-2');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-2');
+            }, 2500);
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        }
+
+        function createSunTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            const grad = ctx.createRadialGradient(256, 256, 10, 256, 256, 256);
+            grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.3, '#f59e0b'); grad.addColorStop(1, '#9a3412');
+            ctx.fillStyle = grad; ctx.fillRect(0, 0, 512, 512);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function createEarthTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 1024; canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#0284c7'; ctx.fillRect(0, 0, 1024, 512);
+            ctx.fillStyle = '#15803d';
+            ctx.beginPath(); ctx.ellipse(700, 180, 220, 110, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(820, 360, 70, 45, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(280, 180, 70, 120, -0.2, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(0, 0, 1024, 25); ctx.fillRect(0, 475, 1024, 37);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function init3DOrbitScene() {
+            const container = document.getElementById('canvas-container-3d');
+            if(!container) return;
+
+            scene3D = new THREE.Scene();
+            camera3D = new THREE.PerspectiveCamera(45, container.offsetWidth / container.offsetHeight, 0.1, 1000);
+            camera3D.position.set(0, 20, 60);
+
+            renderer3D = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer3D.setSize(container.offsetWidth, container.offsetHeight);
+            renderer3D.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer3D.domElement);
+
+            controls3D = new THREE.OrbitControls(camera3D, renderer3D.domElement);
+            controls3D.enableDamping = true;
+            controls3D.minDistance = 4.2; controls3D.maxDistance = 140;
+
+            scene3D.add(new THREE.AmbientLight(0x222233, 0.8));
+
+            dirLight3D = new THREE.DirectionalLight(0xfff7ed, 2.8);
+            scene3D.add(dirLight3D);
+
+            // Sun
+            const sunGeo = new THREE.SphereGeometry(6, 32, 32);
+            const sunMat = new THREE.MeshBasicMaterial({ map: createSunTexture() });
+            scene3D.add(new THREE.Mesh(sunGeo, sunMat));
+
+            // Visible Orbit Ring
+            const orbitPoints = [];
+            const radius = 30;
+            for (let i = 0; i <= 128; i++) {
+                const theta = (i / 128) * Math.PI * 2;
+                orbitPoints.push(new THREE.Vector3(Math.cos(theta) * radius, 0, Math.sin(theta) * radius));
+            }
+            const orbitGeo = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+            orbitRingLine = new THREE.Line(orbitGeo, new THREE.LineDashedMaterial({ color: 0x64748b, dashSize: 1, gapSize: 0.5 }));
+            orbitRingLine.computeLineDistances();
+            scene3D.add(orbitRingLine);
+
+            // Sunlight Rays Group
+            sunlightBeamsGroup = new THREE.Group();
+            scene3D.add(sunlightBeamsGroup);
+
+            // Earth
+            const earthGeo = new THREE.SphereGeometry(3.5, 32, 32);
+            const earthMat = new THREE.MeshPhongMaterial({ map: createEarthTexture(), shininess: 15 });
+            earthMesh3D = new THREE.Mesh(earthGeo, earthMat);
+            earthMesh3D.rotation.z = AXIS_TILT_RAD;
+            scene3D.add(earthMesh3D);
+
+            const axisGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -6, 0), new THREE.Vector3(0, 6, 0)]);
+            earthMesh3D.add(new THREE.Line(axisGeo, new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 3 })));
+
+            // High-contrast 3D Pin Markers for HK and Melbourne
+            hkPinMesh = addCityPin(earthMesh3D, 22.3, 114.1, 0xf43f5e, 0xff85a1, true); // HK Pin with distinct highlight
+            melPinMesh = addCityPin(earthMesh3D, -37.8, 144.9, 0x38bdf8, 0x7dd3fc, false); // Mel Pin
+
+            updateOrbitPosition();
+        }
+
+        function addCityPin(parent, lat, lon, colorHex, glowColorHex, isHK) {
+            const phi = (90 - lat) * (Math.PI / 180);
+            const theta = (lon + 180) * (Math.PI / 180);
+            const r = 3.51;
+
+            const x = -(r * Math.sin(phi) * Math.cos(theta));
+            const z = (r * Math.sin(phi) * Math.sin(theta));
+            const y = (r * Math.cos(phi));
+
+            const pinGroup = new THREE.Group();
+            pinGroup.position.set(x, y, z);
+
+            // Glowing Center Dot
+            const dotMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(isHK ? 0.22 : 0.18, 16, 16),
+                new THREE.MeshBasicMaterial({ color: colorHex })
+            );
+            pinGroup.add(dotMesh);
+
+            // Pulsing Outer Beacon Ring
+            const ringMesh = new THREE.Mesh(
+                new THREE.RingGeometry(isHK ? 0.25 : 0.2, isHK ? 0.45 : 0.32, 32),
+                new THREE.MeshBasicMaterial({ color: glowColorHex, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
+            );
+            ringMesh.lookAt(x * 2, y * 2, z * 2);
+            pinGroup.add(ringMesh);
+
+            // Vertical Marker Pointer
+            const lineGeo = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(x * 0.3, y * 0.3, z * 0.3)
+            ]);
+            const lineMesh = new THREE.Line(lineGeo, new THREE.LineBasicMaterial({ color: glowColorHex, linewidth: isHK ? 3 : 2 }));
+            pinGroup.add(lineMesh);
+
+            parent.add(pinGroup);
+            return pinGroup;
+        }
+
+        function updateFloatingPinLabels() {
+            if(!camera3D || !earthMesh3D || !hkPinMesh || !melPinMesh || currentTab !== '3d') return;
+
+            const container = document.getElementById('canvas-container-3d');
+            if(!container) return;
+
+            updateSingleLabel(hkPinMesh, 'pin-hk-label', container);
+            updateSingleLabel(melPinMesh, 'pin-mel-label', container);
+        }
+
+        function updateSingleLabel(pinGroup, labelId, container) {
+            const labelEl = document.getElementById(labelId);
+            if(!labelEl) return;
+
+            const wp = new THREE.Vector3();
+            pinGroup.getWorldPosition(wp);
+
+            const earthPos = new THREE.Vector3();
+            earthMesh3D.getWorldPosition(earthPos);
+
+            const camToPin = wp.clone().sub(camera3D.position);
+            const camToEarth = earthPos.clone().sub(camera3D.position);
+
+            if(camToPin.length() > camToEarth.length() && wp.distanceTo(earthPos) < 3.6) {
+                const angle = wp.clone().sub(earthPos).angleTo(camera3D.position.clone().sub(earthPos));
+                if(angle > Math.PI / 2.2) {
+                    labelEl.style.opacity = '0';
+                    return;
+                }
+            }
+
+            wp.project(camera3D);
+            const x = (wp.x * 0.5 + 0.5) * container.offsetWidth;
+            const y = (-(wp.y * 0.5) + 0.5) * container.offsetHeight;
+
+            labelEl.style.left = `${x}px`;
+            labelEl.style.top = `${y}px`;
+            labelEl.style.opacity = '1';
+        }
+
+        function updateOrbitPosition() {
+            if(!earthMesh3D) return;
+
+            const orbitAngle = ((orbitDay - 80) / 365) * Math.PI * 2;
+            const radius = 30;
+
+            const earthX = Math.cos(orbitAngle) * radius;
+            const earthZ = Math.sin(orbitAngle) * radius;
+
+            earthMesh3D.position.set(earthX, 0, earthZ);
+
+            if(dirLight3D) {
+                dirLight3D.position.set(-earthX, 0, -earthZ).normalize();
+            }
+
+            if(sunlightBeamsGroup) {
+                while(sunlightBeamsGroup.children.length > 0) sunlightBeamsGroup.remove(sunlightBeamsGroup.children[0]);
+                for(let k = -2.5; k <= 2.5; k += 1.0) {
+                    const startP = new THREE.Vector3(0, k, 0);
+                    const endP = new THREE.Vector3(earthX, k, earthZ);
+                    const beamGeo = new THREE.BufferGeometry().setFromPoints([startP, endP]);
+                    const beamLine = new THREE.Line(beamGeo, new THREE.LineBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.45 }));
+                    sunlightBeamsGroup.add(beamLine);
+                }
+            }
+
+            const declination = 23.45 * Math.sin((360 / 365) * (orbitDay - 80) * (Math.PI / 180));
+            
+            let nhRatio = Math.round(50 + declination * 0.65);
+            let shRatio = 100 - nhRatio;
+
+            document.getElementById('nh-light-ratio').innerText = `${nhRatio}% (${nhRatio > 50 ? '高' : '低'})`;
+            document.getElementById('sh-light-ratio').innerText = `${shRatio}% (${shRatio > 50 ? '高' : '低'})`;
+
+            let dateDesc = "春秋分附近";
+            if(orbitDay >= 70 && orbitDay <= 90) dateDesc = "約 3 月 21 日 - 春分";
+            else if(orbitDay >= 162 && orbitDay <= 182) dateDesc = "約 6 月 21 日 - 夏至";
+            else if(orbitDay >= 254 && orbitDay <= 274) dateDesc = "約 9 月 23 日 - 秋分";
+            else if(orbitDay >= 345 || orbitDay <= 10) dateDesc = "約 12 月 22 日 - 冬至";
+
+            document.getElementById('date-display').innerText = `第 ${Math.round(orbitDay)} 天 (${dateDesc})`;
+
+            updateSidebarData(declination, orbitDay);
+        }
+
+        function updateSidebarData(declination, day) {
+            const hkLat = 22.3 * (Math.PI / 180);
+            const melLat = -37.8 * (Math.PI / 180);
+            const decRad = declination * (Math.PI / 180);
+
+            let hkCosH = -Math.tan(hkLat) * Math.tan(decRad);
+            hkCosH = Math.max(-1, Math.min(1, hkCosH));
+            const hkDayLen = (2 * Math.acos(hkCosH) * (180 / Math.PI) / 15).toFixed(1);
+
+            let melCosH = -Math.tan(melLat) * Math.tan(decRad);
+            melCosH = Math.max(-1, Math.min(1, melCosH));
+            const melDayLen = (2 * Math.acos(melCosH) * (180 / Math.PI) / 15).toFixed(1);
+
+            let hkSeason, hkRay, hkColor;
+            let melSeason, melRay, melColor;
+            let expText = "";
+
+            if (day >= 65 && day <= 100) {
+                // Spring Equinox (March)
+                hkSeason = "春季 Spring (漸暖)"; hkRay = "適中斜射"; hkColor = "text-emerald-400";
+                melSeason = "秋季 Autumn (漸涼)"; melRay = "適中斜射"; melColor = "text-orange-400";
+                expText = "三月春分前後，太陽直射赤道。<strong>香港進入春季（氣溫漸暖），墨爾本進入秋季（氣溫漸涼）</strong>。此時南北半球獲得的太陽光照射強度與晝夜時間（各 12.0 小時）幾乎完全相同！";
+            } else if (day >= 245 && day <= 280) {
+                // Autumn Equinox (September)
+                hkSeason = "秋季 Autumn (漸涼)"; hkRay = "適中斜射"; hkColor = "text-orange-400";
+                melSeason = "春季 Spring (漸暖)"; melRay = "適中斜射"; melColor = "text-emerald-400";
+                expText = "九月秋分前後，太陽直射點再次回歸赤道。<strong>香港進入秋季（天氣轉涼），墨爾本則進入春季（氣溫回暖）</strong>。兩地白晝時間均為 12.0 小時（晝夜平分）。";
+            } else if (declination < -10) { 
+                hkSeason = "冬季 Winter"; hkRay = "大斜射 (角度低)"; hkColor = "text-sky-400";
+                melSeason = "夏季 Summer"; melRay = "直射 (接近90°)"; melColor = "text-amber-400";
+                expText = "當香港是冬天時，太陽直射南半球（南回歸線）。此時<strong>南半球受太陽照射的表面積顯著大於北半球（約 65% vs 35%）</strong>，南極圈出現極晝，南半球獲取的太陽熱能量密度遠高於北半球！";
+            } else { 
+                hkSeason = "夏季 Summer"; hkRay = "接近直射 (高角度)"; hkColor = "text-amber-400";
+                melSeason = "冬季 Winter"; melRay = "大斜射 (角度低)"; hkColor = "text-sky-400";
+                expText = "當香港是夏季時，太陽直射北半球（北回歸線）。此時<strong>北半球受太陽照射的表面積顯著大於南半球（約 65% vs 35%）</strong>，北極圈出現極晝，北半球獲取的太陽熱能量密度遠高於南半球！";
+            }
+
+            document.getElementById('season-hk-label').innerText = hkSeason;
+            document.getElementById('season-hk-label').className = `font-black ${hkColor}`;
+            document.getElementById('hk-ray-type').innerText = hkRay;
+            document.getElementById('hk-day-len').innerText = `白晝長度約 ${hkDayLen} 小時`;
+
+            document.getElementById('season-mel-label').innerText = melSeason;
+            document.getElementById('season-mel-label').className = `font-black ${melColor}`;
+            document.getElementById('mel-ray-type').innerText = melRay;
+            document.getElementById('mel-day-len').innerText = `白晝長度約 ${melDayLen} 小時`;
+
+            document.getElementById('dynamic-explanation-text').innerHTML = expText;
+        }
+
+        function zoomToEarth(isClose) {
+            if(!controls3D || !earthMesh3D) return;
+            if(isClose) {
+                const targetPos = earthMesh3D.position.clone();
+                camera3D.position.set(targetPos.x + 7, targetPos.y + 3, targetPos.z + 7);
+                controls3D.target.copy(targetPos);
+            } else {
+                camera3D.position.set(0, 20, 60);
+                controls3D.target.set(0, 0, 0);
+            }
+            controls3D.update();
+        }
+
+        function init3DFlashlightScene() {
+            const container = document.getElementById('canvas-container-flashlight');
+            if(!container) return;
+
+            container.innerHTML = '';
+
+            sceneFlash = new THREE.Scene();
+            cameraFlash = new THREE.PerspectiveCamera(45, container.offsetWidth / container.offsetHeight || 1.33, 0.1, 1000);
+            cameraFlash.position.set(0, 8, 20);
+
+            rendererFlash = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            rendererFlash.setSize(container.offsetWidth || 600, container.offsetHeight || 400);
+            rendererFlash.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(rendererFlash.domElement);
+
+            controlsFlash = new THREE.OrbitControls(cameraFlash, rendererFlash.domElement);
+            controlsFlash.enableDamping = true;
+
+            sceneFlash.add(new THREE.AmbientLight(0x444455, 1.2));
+
+            const flashDirLight = new THREE.DirectionalLight(0xfff7ed, 1.5);
+            flashDirLight.position.set(10, 20, 10);
+            sceneFlash.add(flashDirLight);
+
+            // 3D Globe Sphere for Tab 2
+            const earthGeo = new THREE.SphereGeometry(6, 64, 64);
+            const earthMat = new THREE.MeshPhongMaterial({ map: createEarthTexture(), shininess: 12 });
+            earthMeshFlash = new THREE.Mesh(earthGeo, earthMat);
+            earthMeshFlash.position.set(0, -6, 0);
+            sceneFlash.add(earthMeshFlash);
+
+            addCityPin(earthMeshFlash, 22.3, 114.1, 0xf43f5e, 0xff85a1);
+            addCityPin(earthMeshFlash, -37.8, 144.9, 0x38bdf8, 0x7dd3fc);
+
+            // Light Source (Flashlight / Solar Emitter)
+            flashlightBodyMesh = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.8, 3, 32), new THREE.MeshBasicMaterial({ color: 0xf59e0b }));
+            sceneFlash.add(flashlightBodyMesh);
+
+            sunRaysGroup = new THREE.Group();
+            sceneFlash.add(sunRaysGroup);
+
+            // Dynamic 3D Footprint Decal Spot on Globe
+            const footprintGeo = new THREE.RingGeometry(0.05, 1.6, 32);
+            const footprintMat = new THREE.MeshBasicMaterial({ color: 0xef4444, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+            footprintMesh = new THREE.Mesh(footprintGeo, footprintMat);
+            footprintMesh.rotation.x = Math.PI / 2;
+            sceneFlash.add(footprintMesh);
+
+            updateFlashlight3D();
+        }
+
+        function updateFlashlight3D() {
+            if(!sunRaysGroup || !footprintMesh || !flashlightBodyMesh) return;
+            while(sunRaysGroup.children.length > 0) sunRaysGroup.remove(sunRaysGroup.children[0]);
+
+            const rad = (flashlightAngle * Math.PI) / 180;
+            const dist = 11;
+
+            const lightX = Math.cos(rad) * dist;
+            const lightY = Math.sin(rad) * dist;
+
+            flashlightBodyMesh.position.set(lightX, lightY, 0);
+            flashlightBodyMesh.rotation.z = rad - Math.PI / 2;
+
+            // Beams hitting globe surface at (0,0,0)
+            for(let i = -1.2; i <= 1.2; i += 0.6) {
+                for(let j = -1.2; j <= 1.2; j += 0.6) {
+                    const startP = new THREE.Vector3(lightX + i * Math.sin(rad), lightY - i * Math.cos(rad), j);
+                    const endP = new THREE.Vector3(i / Math.sin(rad), 0, j);
+                    const beamLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([startP, endP]), new THREE.LineBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.65 }));
+                    sunRaysGroup.add(beamLine);
+                }
+            }
+
+            const sinAngle = Math.sin(rad);
+            const stretchFactor = 1 / sinAngle;
+
+            footprintMesh.position.set(0, 0.05, 0);
+            footprintMesh.scale.set(stretchFactor, 1, 1);
+
+            document.getElementById('exp-area-factor').innerText = `${stretchFactor.toFixed(1)}x`;
+            document.getElementById('exp-energy-density').innerText = `${Math.round(sinAngle * 100)}%`;
+            document.getElementById('exp-temp-est').innerText = sinAngle > 0.85 ? "炎熱 (High Heat)" : sinAngle > 0.6 ? "溫和 (Warm)" : "寒冷 (Cool)";
+            document.getElementById('flashlight-angle-badge').innerText = `${flashlightAngle}°`;
+            document.getElementById('flashlight-angle-text').innerText = `${flashlightAngle}° (${flashlightAngle === 90 ? '垂直直射 Direct' : '傾斜射入 Oblique'})`;
+        }
+
+        function drawDeepDiveCanvas() {
+            const canvas = document.getElementById('canvas-deepdive');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const container = canvas.parentElement;
+            if (!container) return;
+
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width || 500;
+            canvas.height = rect.height || 300;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#030712';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const groundY = canvas.height - 40;
+            const rad = (deepDiveAngle * Math.PI) / 180;
+            const beamWidth = 80;
+            const spreadWidth = beamWidth / Math.sin(rad);
+            const centerX = canvas.width / 2;
+
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, groundY, canvas.width, 40);
+
+            ctx.strokeStyle = '#fef08a';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 10; i++) {
+                const offset = -beamWidth / 2 + (i + 0.5) * (beamWidth / 10);
+                const sx = centerX - Math.cos(rad) * 180 + offset * Math.sin(rad);
+                const sy = groundY - Math.sin(rad) * 180 - offset * Math.cos(rad);
+                const hitX = (centerX - spreadWidth / 2) + (i + 0.5) * (spreadWidth / 10);
+
+                ctx.beginPath();
+                ctx.moveTo(sx, sy);
+                ctx.lineTo(hitX, groundY);
+                ctx.stroke();
+            }
+        }
+
+        const quizData = [
+            { q: "香港位於北半球。當香港處於炎熱的夏季時，位於南半球的澳洲墨爾本是什麼季節？", options: ["夏季", "冬季", "春季", "秋季"], ans: 1, explain: "地軸傾斜 23.5°，南北半球受到的陽光照射角度與受光面積相反，因此季節完全相反！" },
+            { q: "太陽光直射地表（90°）時，為什麼氣溫會最高？", options: ["因為陽光受光斑點最小，單位面積熱能量密度高", "因為太陽距離地球最近", "因為地球自轉速度變快", "因為太陽發射的總熱量增加了"], ans: 0, explain: "直射時光線最集中，地面受光斑點面積最小，單位面積獲得的熱量最多！" },
+            { q: "香港在 12 月冬至時，白晝長度大約是多少小時？", options: ["約 10.5 小時 (晝短夜長)", "約 14.8 小時 (晝長夜短)", "約 24 小時 (極晝)", "約 0 小時 (極夜)"], ans: 0, explain: "冬至時太陽直射南半球，北半球（香港）太陽大斜射且白晝偏短，約 10.5 小時。" },
+            { q: "地球形成四季變化的最主要物理原因是什麼？", options: ["地球橢圓軌道距離太陽忽遠忽近", "地軸傾斜 23.5° 並且繞太陽公轉", "地球自轉速度有快有慢", "太陽本身的發光強度每年改變"], ans: 1, explain: "地軸傾角 23.5° 在公轉過程中方向保持不變，使得太陽直射點在南北半球之間來回移動，形成四季！" }
+        ];
+        let currentQuizIdx = 0, score = 0;
+
+        function renderQuiz() {
+            const q = quizData[currentQuizIdx];
+            document.getElementById('quiz-num').innerText = `Q${currentQuizIdx + 1}`;
+            document.getElementById('quiz-question').innerText = q.q;
+            const optsContainer = document.getElementById('quiz-options');
+            optsContainer.innerHTML = '';
+            q.options.forEach((opt, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "p-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 rounded-xl border border-slate-800 text-xs font-bold text-left transition";
+                btn.innerText = `${['A', 'B', 'C', 'D'][idx]}. ${opt}`;
+                btn.onclick = () => checkQuizAns(idx);
+                optsContainer.appendChild(btn);
+            });
+            document.getElementById('quiz-feedback').classList.add('hidden');
+            document.getElementById('btn-next-quiz').classList.add('hidden');
+        }
+
+        function checkQuizAns(selectedIdx) {
+            const q = quizData[currentQuizIdx];
+            const fb = document.getElementById('quiz-feedback');
+            fb.classList.remove('hidden');
+            if(selectedIdx === q.ans) {
+                score += 25;
+                document.getElementById('quiz-score').innerText = score;
+                fb.className = "p-3 rounded-xl text-xs font-medium leading-relaxed bg-emerald-950/60 border border-emerald-500/40 text-emerald-200";
+                fb.innerHTML = `✅ <strong>回答正確！</strong> ${q.explain}`;
+            } else {
+                fb.className = "p-3 rounded-xl text-xs font-medium leading-relaxed bg-rose-950/60 border border-rose-500/40 text-rose-200";
+                fb.innerHTML = `❌ <strong>答案不正確。</strong> ${q.explain}`;
+            }
+            document.getElementById('btn-next-quiz').classList.remove('hidden');
+        }
+
+        function nextQuestion() { currentQuizIdx = (currentQuizIdx + 1) % quizData.length; renderQuiz(); }
+        function resetQuiz() { score = 0; currentQuizIdx = 0; document.getElementById('quiz-score').innerText = '0'; renderQuiz(); }
+
+        function onOrbitSliderChange(val) { orbitDay = parseInt(val); updateOrbitPosition(); }
+        function toggleOrbitPlay() { isOrbitPlaying = !isOrbitPlaying; document.getElementById('text-orbit-play').innerText = isOrbitPlaying ? "暫停公轉" : "播放公轉"; }
+        function toggleEarthRotate() { isEarthRotating3D = !isEarthRotating3D; document.getElementById('text-earth-rotate').innerText = `地球自轉：${isEarthRotating3D ? 'ON' : 'OFF'}`; }
+        function setSeason(idx) { orbitDay = [80, 172, 264, 355][idx]; document.getElementById('slider-orbit').value = orbitDay; updateOrbitPosition(); }
+        function onFlashlightSliderChange(val) { flashlightAngle = parseFloat(val); updateFlashlight3D(); }
+        function setFlashlightPreset(angle) { flashlightAngle = angle; document.getElementById('slider-flashlight').value = angle; updateFlashlight3D(); }
+        function onDeepDiveAngleChange(val) { deepDiveAngle = parseFloat(val); document.getElementById('deepdive-angle-text').innerText = `${deepDiveAngle}°`; drawDeepDiveCanvas(); }
+
+        function resetAllSettings() {
+            isOrbitPlaying = false; isEarthRotating3D = true; orbitDay = 355; flashlightAngle = 90; deepDiveAngle = 90;
+            document.getElementById('slider-orbit').value = 355;
+            document.getElementById('slider-flashlight').value = 90;
+            document.getElementById('deepdive-angle-slider').value = 90;
+            document.getElementById('text-earth-rotate').innerText = "地球自轉：ON";
+            document.getElementById('text-orbit-play').innerText = "播放公轉";
+            zoomToEarth(false); updateOrbitPosition(); updateFlashlight3D(); drawDeepDiveCanvas(); resetQuiz();
+            showToast("已成功復原所有設定至預設狀態！");
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            const tabs = ['3d', 'flashlight', 'deepdive', 'quiz'];
+            tabs.forEach(t => {
+                document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tab);
+                const btn = document.getElementById(`tab-btn-${t}`);
+                if (btn) {
+                    if (t === tab) {
+                        btn.className = "px-3 py-1.5 rounded-lg transition bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md flex items-center space-x-1 font-bold";
+                    } else {
+                        btn.className = "px-3 py-1.5 rounded-lg transition text-slate-300 hover:text-white flex items-center space-x-1 font-bold";
+                    }
+                }
+            });
+
+            requestAnimationFrame(() => {
+                if (tab === '3d' && renderer3D && camera3D) {
+                    const container = document.getElementById('canvas-container-3d');
+                    if (container && container.offsetWidth > 0) {
+                        camera3D.aspect = container.offsetWidth / container.offsetHeight;
+                        camera3D.updateProjectionMatrix();
+                        renderer3D.setSize(container.offsetWidth, container.offsetHeight);
+                    }
+                }
+                if (tab === 'flashlight') {
+                    const container = document.getElementById('canvas-container-flashlight');
+                    if (container && container.offsetWidth > 0) {
+                        if (!rendererFlash) {
+                            init3DFlashlightScene();
+                        } else {
+                            cameraFlash.aspect = container.offsetWidth / container.offsetHeight;
+                            cameraFlash.updateProjectionMatrix();
+                            rendererFlash.setSize(container.offsetWidth, container.offsetHeight);
+                        }
+                    }
+                    updateFlashlight3D();
+                }
+                if (tab === 'deepdive') drawDeepDiveCanvas();
+            });
+        }
+
+        function onWindowResize() {
+            if (currentTab === '3d' && renderer3D && camera3D) {
+                const container = document.getElementById('canvas-container-3d');
+                if (container) {
+                    camera3D.aspect = container.offsetWidth / container.offsetHeight;
+                    camera3D.updateProjectionMatrix();
+                    renderer3D.setSize(container.offsetWidth, container.offsetHeight);
+                }
+            }
+            if (currentTab === 'flashlight' && rendererFlash && cameraFlash) {
+                const container = document.getElementById('canvas-container-flashlight');
+                if (container) {
+                    cameraFlash.aspect = container.offsetWidth / container.offsetHeight;
+                    cameraFlash.updateProjectionMatrix();
+                    rendererFlash.setSize(container.offsetWidth, container.offsetHeight);
+                }
+            }
+            if (currentTab === 'deepdive') drawDeepDiveCanvas();
+        }
+
+        window.addEventListener('resize', onWindowResize);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if(isOrbitPlaying) {
+                orbitDay = (orbitDay + 0.4);
+                if (orbitDay > 365) orbitDay = 1;
+                document.getElementById('slider-orbit').value = orbitDay;
+                updateOrbitPosition();
+            }
+            if(earthMesh3D && isEarthRotating3D) earthMesh3D.rotation.y += 0.008;
+            if(earthMeshFlash && isEarthRotating3D) earthMeshFlash.rotation.y += 0.004;
+
+            if(currentTab === '3d' && renderer3D) { 
+                controls3D.update(); 
+                renderer3D.render(scene3D, camera3D); 
+                updateFloatingPinLabels();
+            }
+            if(currentTab === 'flashlight' && rendererFlash) { 
+                controlsFlash.update(); 
+                rendererFlash.render(sceneFlash, cameraFlash); 
+            }
+        }
+
+        window.onload = function() {
+            init3DOrbitScene();
+            init3DFlashlightScene();
+            renderQuiz();
+            animate();
+        };
+    </script>
+</body>
+</html>
